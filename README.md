@@ -50,6 +50,15 @@ The bill for skipping this is not only tokens. It is cost, speed, and consistenc
 
 ## Install
 
+### Prerequisites
+
+- [`uv`](https://docs.astral.sh/uv/) runs every factory script.
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`) or [`pi`](https://github.com/mariozechner/pi-coding-agent) is the coding agent that runs each phase.
+- `sqlite3` lets you query the trace db at `adws/adw_data/sssf.db`.
+- `git` is needed by chains that end in a commit phase.
+- [`gh`](https://cli.github.com/) is needed only for workflows that open pull requests.
+- [`bun`](https://bun.sh) is needed only for the dashboard (the trace visualizer).
+
 Two steps: get the skill into your repo, then stamp the factory.
 
 ### Agentic Install
