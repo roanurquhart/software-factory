@@ -66,9 +66,9 @@ def validate(cfg: SSSFConfig, required: list[str]) -> None:
             if agent.coding_agent == "claude_code":
                 agent_cc.check_installed()
                 agent_cc.resolve_model(agent.model)
-                if agent.harness_engineering:
-                    raise ValueError("harness_engineering is pi-only (extensions); "
-                                     "remove it for coding_agent: claude_code")
+                for ref in agent.harness_engineering:
+                    if not Path(ref).is_file():
+                        raise ValueError(f"MCP config not found: {ref}")
             else:
                 agent_pi.resolve_model(agent.model)
         except ValueError as e:
@@ -95,6 +95,7 @@ def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
     prompts.save(agent_dir / "prompts", "system.md", system_text)
     prompts.save(agent_dir / "prompts", "user.md", user_text)
 
+    extensions = _harness(agent, agent_dir, variables)
     session_id = _agent_session_id(run, agent)
     run.tracer.event(EventRecord(adw_id=run.adw_id, phase_id=phase.phase_id,
                                  type="agent_start", name=agent.name,
@@ -125,9 +126,10 @@ def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
             session_dir=str((agent_dir / "pi_sessions").resolve()),
             raw_output_path=str((agent_dir / "raw_output.jsonl").resolve()),
             tools=agent.tools,
-            extensions=agent.harness_engineering,
+            extensions=extensions,
             cwd=str(run.repo_root),
             add_dirs=[str(run.session_dir.resolve())],
+            disallowed_tools=agent.disallowed_tools,
         )
         result = _backend(agent).run(
             request,
@@ -254,6 +256,19 @@ def _event_forwarder(run, phase: Phase, agent: AgentConfig):
                                          ended_at=record.pop("ended_at", None),
                                          payload={**record, "agent": agent.name}))
     return forward
+
+
+def _harness(agent: AgentConfig, agent_dir: Path, variables: dict) -> list[str]:
+    """Pi extensions pass through as-is. Claude Code MCP configs are templates,
+    rendered like prompts, so a server can point at this run's own dirs —
+    e.g. Playwright's --output-dir at {{context_handoff_dir}}."""
+    if agent.coding_agent != "claude_code":
+        return agent.harness_engineering
+    rendered = []
+    for ref in agent.harness_engineering:
+        text = prompts.render(ref, variables)
+        rendered.append(str(prompts.save(agent_dir / "harness", Path(ref).name, text).resolve()))
+    return rendered
 
 
 def _backend(agent: AgentConfig):

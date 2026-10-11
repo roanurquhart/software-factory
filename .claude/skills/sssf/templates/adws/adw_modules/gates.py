@@ -14,7 +14,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from .data_types import EnvelopeBase, GateReport
+from .data_types import EnvelopeBase, GateReport, UiTestOutput
 
 TAIL_CHARS = 1000        # command output kept as evidence on a failure
 
@@ -106,3 +106,35 @@ def tests_pass(command: str):
         return GateReport().check(command, ok, note)
     gate.__name__ = f"tests_pass({command})"
     return gate
+
+
+def ui_evidence(envelope: UiTestOutput, run) -> GateReport:
+    """Every verdict has a screenshot, and it is a real file in the session runtime.
+
+    Inside context_handoff/, not the repo: a screenshot in the tree would be a
+    write by a read-only agent, and the permission check would kill the phase.
+    """
+    report = GateReport()
+    handoff = Path(run.context_handoff_dir).resolve()
+    if not envelope.checks:
+        report.check("checks", False, "no UI checks reported — verify every check in the brief")
+    for c in envelope.checks:
+        shot = Path(c.screenshot) if c.screenshot else None
+        if shot is None:
+            report.check(c.check, False, "no screenshot — every verdict needs one")
+        elif not shot.is_absolute() or not shot.exists():
+            report.check(c.check, False, f"screenshot not found at {c.screenshot} — use an absolute path")
+        elif handoff not in shot.resolve().parents:
+            report.check(c.check, False, f"screenshot must be under {handoff}/screenshots")
+        else:
+            report.check(c.check, True, f"{'pass' if c.passed else 'fail'}, {_size(shot)} screenshot")
+    return report
+
+
+def ui_verdict_consistent(envelope: UiTestOutput, run) -> GateReport:
+    """`passed` is true exactly when every check passed."""
+    failed = [c.check for c in envelope.checks if not c.passed]
+    ok = envelope.passed == (not failed)
+    return GateReport().check("passed vs checks", ok,
+                              "consistent" if ok else
+                              f"passed={envelope.passed} but {len(failed)} check(s) failed")

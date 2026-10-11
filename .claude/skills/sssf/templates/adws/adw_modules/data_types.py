@@ -88,6 +88,12 @@ class PlanOutput(EnvelopeBase):
     # work product, so a chain that commits per step never reuses one agent's
     # words for another agent's diff.
     commit_message: str = ""
+    # Does the work change what a user sees? The planner's INTENT — code also
+    # checks the actual diff against quality.UI_APP.frontend_paths, and the UI
+    # phase runs if either says yes (see adw_modules/ui.py).
+    ui_impact: bool = False
+    # What the ui_tester must see in the browser, one observable behaviour each.
+    ui_checks: list[str] = Field(default_factory=list)
 
 
 class BuildOutput(EnvelopeBase):
@@ -118,6 +124,47 @@ class ReviewOutput(EnvelopeBase):
     approved: bool = False
     findings: list[ReviewFinding] = Field(default_factory=list)
     blocking: list[str] = Field(default_factory=list)   # what must change before approval
+
+
+class UiCheck(BaseModel):
+    check: str                      # the behaviour, in the plan's words
+    passed: bool
+    observed: str                   # what the browser actually showed
+    screenshot: str = ""            # absolute path under context_handoff/screenshots/
+
+
+class UiTestOutput(EnvelopeBase):
+    """The ui_tester's verdict: one observed, screenshotted result per check.
+
+    On a failure this whole envelope is the builder's fix request — the
+    screenshot paths ride along, and the builder opens them with Read.
+    """
+
+    passed: bool = False
+    checks: list[UiCheck] = Field(default_factory=list)
+
+
+class UiTestBrief(EnvelopeBase):
+    """What code hands the ui_tester: where the app is and what to look for."""
+
+    url: str
+    checks: list[str] = Field(default_factory=list)
+    plan_path: str = ""
+    changed_files: list[str] = Field(default_factory=list)
+    screenshots_dir: str = ""
+
+
+class UiAppSpec(BaseModel):
+    """How code starts the app for the ui_test phase. Set in quality.UI_APP.
+
+    `argv` may contain `{port}`; the same port is also exported as PORT. An
+    empty argv means UI testing is not set up, and the phase is skipped.
+    """
+
+    argv: list[str] = Field(default_factory=list)
+    ready_path: str = "/"           # polled until it answers below HTTP 500
+    frontend_paths: list[str] = Field(default_factory=list)   # trailing "/" = dir prefix, "*" = glob
+    startup_timeout_seconds: int = 60
 
 
 class DocumentOutput(EnvelopeBase):
@@ -311,6 +358,9 @@ class AgentConfig(BaseModel):
     prompt_engineering: PromptEngineering
     harness_engineering: list[str] = Field(default_factory=list)
     tools: Optional[list[str]] = None    # allowlist; None = all tools usable
+    # Claude Code only: removed outright, and beats any allow — e.g. allow all of
+    # `mcp__playwright` but drop `mcp__playwright__browser_run_code_unsafe`.
+    disallowed_tools: list[str] = Field(default_factory=list)
     # What this agent may MODIFY in the repo, enforced in code after every call
     # (see adw_modules/permissions.py). `tools` cannot express this: `bash` runs
     # anything and `write` reaches any path, so an agent's capability list is a
@@ -386,6 +436,7 @@ class PiRequest(BaseModel):
     # Dirs outside cwd the agent must reach — the session runtime, when the run
     # works in a worktree. Claude Code confines file tools without them; pi ignores it.
     add_dirs: list[str] = Field(default_factory=list)
+    disallowed_tools: list[str] = Field(default_factory=list)   # Claude Code only
 
 
 class BranchFlow(BaseModel):
@@ -393,6 +444,17 @@ class BranchFlow(BaseModel):
 
     base: str = "main"
     open_pr: bool = True            # False: branch and commit locally, no push, no PR
+
+
+class PrParts(BaseModel):
+    """Everything the PR body is assembled from — agent reports, nothing invented."""
+
+    plan: PlanOutput
+    review: ReviewOutput
+    document: DocumentOutput
+    ui: Optional[UiTestOutput] = None
+    ui_note: str = ""               # why the UI phase was skipped, when it was
+    adw_id: str
 
 
 class PullRequest(BaseModel):

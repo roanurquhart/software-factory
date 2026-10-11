@@ -37,8 +37,22 @@ from pathlib import Path
 from typing import Callable
 
 from .data_types import (EventRecord, QualityCheckResult, QualityCheckSpec, QualityResult,
-                         VerifyOutput)
+                         UiAppSpec, VerifyOutput)
 from .utils import now_iso, operator_env
+
+# ── UI app: how adw_sdlc's ui_test phase starts your frontend ───────────────
+# Empty argv = UI testing is OFF and the phase is skipped (logged, never silent).
+# Setup guide: .claude/skills/sssf/cookbooks/setup_ui_testing.md
+#
+#   argv            the dev-server command, argv list; `{port}` is replaced with a
+#                   free port, which is also exported as PORT
+#   ready_path      polled until it answers below HTTP 500; the tester starts here
+#   frontend_paths  a change to any of these runs the UI phase even when the
+#                   planner did not mark ui_impact
+#
+# e.g. UiAppSpec(argv=["bun", "run", "dev", "--port", "{port}"], ready_path="/",
+#                frontend_paths=["apps/web/", "*.css", "*.tsx"])
+UI_APP = UiAppSpec(argv=[], ready_path="/", frontend_paths=[])
 
 # How much of a failing command's output rides back inside the envelope. Enough
 # for a builder to act on without opening the artifact; bounded so a runaway

@@ -9,6 +9,7 @@ Usage:
 
 Phases: engineer(request) -> git(worktree) -> planner -> git(commit_plan)
         -> builder -> code(test) [-> builder(fix) -> code(test) ... bounded]
+        -> code(ui_scope) [-> code(start_app) -> ui_tester [-> builder(ui_fix) -> ui_tester ... bounded]]
         -> reviewer [-> builder(revise) -> reviewer ... bounded]
         -> code(retest, only if a revision changed code)
         -> git(commit_build) -> code(changes) -> documenter -> git(commit_docs)
@@ -18,6 +19,13 @@ adw_simple_sdlc, moved off the engineer's checkout. The run creates branch
 `sssf/<adw_id>` off `--base` in a worktree at `adws/adw_data/worktrees/<adw_id>`,
 and every agent, test and commit happens there — the engineer's own tree is
 never touched, and two runs can go at once.
+
+UI testing runs only when it can matter, and code decides: the planner's
+`ui_impact` (intent) OR a changed file under quality.UI_APP.frontend_paths
+(fact). Code starts the app on a free port; the ui_tester (Playwright, no
+shell, no edits) screenshots a verdict per check, and failures go back to the
+builder with the screenshot paths. With UI_APP unset the phase is skipped and
+says so. Setup: cookbooks/setup_ui_testing.md.
 
 Branching, committing, pushing and opening the PR are all code. Agents write
 the words (each one's commit_message, the plan and review the PR body is built
@@ -37,14 +45,16 @@ import argparse
 import sys
 
 from adw_modules import (agents, changes, gates, git_helper, pull_request,
-                         quality, session, utils, worktree)
+                         quality, session, ui, utils, worktree)
 from adw_modules.data_types import (AgentCall, BuildOutput, ChangeCapture,
                                     DocumentOutput, PhaseParams, PlanOutput,
-                                    PullRequest, ReviewOutput, BranchFlow)
+                                    PrParts, PullRequest, ReviewOutput,
+                                    UiTestOutput, BranchFlow)
 
 REQUIRED_AGENTS = ["planner", "builder", "reviewer", "documenter"]
 MAX_FIX_LOOPS = 3
 MAX_REVISION_LOOPS = 2
+MAX_UI_LOOPS = 3
 
 DOCUMENT_NOTES = ("Read diff_path in full before writing. Document only what the "
                   "diff shows, then copy the write-up into app_docs/ as your task "
@@ -57,7 +67,8 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
     cfg = agents.load_config(config)
     root = git_helper.repo_root()
     worktree.anchor(cfg, root)            # the run record stays in this checkout
-    agents.validate(cfg, REQUIRED_AGENTS)
+    # ui_tester is only required once UI testing is set up in quality.UI_APP.
+    agents.validate(cfg, REQUIRED_AGENTS + (["ui_tester"] if ui.configured() else []))
     run = session.ensure(cfg, adw_id)
 
     def commit(ph, envelope) -> None:
@@ -119,6 +130,47 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
                                       previous=quality.as_envelope(test, "tests"),
                                       gates=[gates.diff_matches_claims]))
 
+    uitest = None
+    ui_fixed = False
+    with run.phase(PhaseParams(name="ui_scope", kind="code", owner="ui",
+                               description="Decide from the plan and the real diff whether a "
+                                           "browser test can tell us anything")) as ph:
+        touched, ui_note = ui.touched(plan, ui.changed_since(baseline))
+        if touched and not ui.configured():
+            ui_note = (f"{ui_note}, but quality.UI_APP is not set up — UI test skipped "
+                       "(cookbooks/setup_ui_testing.md)")
+        ph.log(run_ui_test=touched and ui.configured(), reason=ui_note)
+
+    if touched and ui.configured():
+        with run.phase(PhaseParams(name="start_app", kind="code", owner="ui",
+                                   description="Serve the app on a free port so the tester gets "
+                                               "a URL, not a setup job")) as ph:
+            app = ui.start(run)
+            ph.log(url=app.url, pid=app.pid, log=str(app.log_path))
+        try:
+            for i in range(1, MAX_UI_LOOPS + 1):
+                with run.phase(PhaseParams(name=f"ui_test_{i}", kind="agent", owner="ui_tester",
+                                           description="Use the app in a real browser and "
+                                                       "screenshot a verdict for every check")) as ph:
+                    uitest = ph.call(AgentCall(
+                        output_type=UiTestOutput, prompt=prompt,
+                        previous=ui.brief(plan, app, run, ui.changed_since(baseline)),
+                        gates=[gates.ui_evidence, gates.ui_verdict_consistent]))
+
+                if uitest.passed or i == MAX_UI_LOOPS:
+                    break
+
+                with run.phase(PhaseParams(name=f"ui_fix_{i}", kind="agent", owner="builder",
+                                           retries=1,
+                                           description="Fix what the browser showed, from the "
+                                                       "tester's words and screenshots")) as ph:
+                    build = ph.call(AgentCall(output_type=BuildOutput, prompt=prompt,
+                                              previous=ui.as_fix_request(uitest),
+                                              gates=[gates.diff_matches_claims]))
+                    ui_fixed = True
+        finally:
+            ui.stop(run, app)             # always — a leaked dev server outlives the run
+
     review = None
     revised = False
     for i in range(1, MAX_REVISION_LOOPS + 1):
@@ -136,17 +188,18 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
                                       gates=[gates.diff_matches_claims]))
             revised = True
 
-    if revised and review is not None and review.approved:
+    if (revised or ui_fixed) and review is not None and review.approved:
         with run.phase(PhaseParams(name="retest", kind="code", owner="quality",
-                                   description="Re-run the suite — the revision changed code "
-                                               "after the last green result")) as ph:
+                                   description="Re-run the suite — a UI fix or revision changed "
+                                               "code after the last green result")) as ph:
             test = quality.run_tests(run)
             record(ph, test)
 
     # Not verified: stop here. Nothing is pushed, and the worktree stays put
     # with the uncommitted code in it for the engineer to look at.
     verified = (test is not None and test.passed
-                and review is not None and review.approved)
+                and review is not None and review.approved
+                and (uitest is None or uitest.passed))
     if verified:
         with run.phase(PhaseParams(name="commit_build", kind="code", owner="git",
                                    description="Land the code only now: green suite, approved review")) as ph:
@@ -183,7 +236,9 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
                                                    "review and docs the agents reported")) as ph:
                 pr = PullRequest(branch=branch, base=base,
                                  title=build.commit_message or plan.summary,
-                                 body=pull_request.body(plan, review, document, run.adw_id))
+                                 body=pull_request.body(PrParts(
+                                     plan=plan, review=review, document=document,
+                                     ui=uitest, ui_note=ui_note, adw_id=run.adw_id)))
                 url = pull_request.open_pr(pr, run.session_dir / "pull_request.md")
                 ph.log(url=url, title=pr.title)
 
@@ -193,7 +248,7 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
             ph.log(removed=str(path), branch=branch)
 
     return run.finish(accepted=verified,
-                      reason="the suite or the review never came back clean — "
+                      reason="the suite, the UI test or the review never came back clean — "
                              f"worktree kept at {path}")
 
 
