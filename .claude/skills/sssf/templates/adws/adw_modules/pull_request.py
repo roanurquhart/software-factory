@@ -10,8 +10,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .data_types import (DocumentOutput, PlanOutput, PullRequest,
-                         ReviewOutput)
+from .data_types import PrParts, PullRequest
 
 
 def _run(cmd: list[str]) -> str:
@@ -35,16 +34,23 @@ def push(branch: str) -> None:
     _run(["git", "push", "-u", "origin", branch])
 
 
-def body(plan: PlanOutput, review: ReviewOutput, document: DocumentOutput, adw_id: str) -> str:
+def body(parts: PrParts) -> str:
     """The PR description, assembled from what the agents reported — nothing invented."""
+    plan, review, document, ui = parts.plan, parts.review, parts.document, parts.ui
     lines = ["## Summary", "", plan.summary, "", "## Review", "", review.summary, ""]
     lines += [f"- [{'x' if f.met else ' '}] {f.requirement} — {f.evidence}"
               for f in review.findings]
+    lines += ["", "## UI test", ""]
+    if ui:
+        lines += [ui.summary, ""]
+        lines += [f"- [{'x' if c.passed else ' '}] {c.check} — {c.observed}" for c in ui.checks]
+    else:
+        lines += [parts.ui_note or "Not run."]
     docs = [path for path in [*plan.artifacts, document.document_path]
             if path and not Path(path).is_absolute()]
     if docs:
         lines += ["", "## Spec and docs", ""] + [f"- `{path}`" for path in dict.fromkeys(docs)]
-    lines += ["", "---", f"SSSF run `{adw_id}`"]
+    lines += ["", "---", f"SSSF run `{parts.adw_id}`"]
     return "\n".join(lines) + "\n"
 
 

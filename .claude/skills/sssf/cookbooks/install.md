@@ -40,7 +40,8 @@ Re-running is safe. `install.py` skips **every** file that already exists — yo
 3. **The model resolves** — the config's default `gemini-3.6-flash` must be a registered id in `~/.pi/agent/models.json`. Check with `pi --list-models` or read the file directly; see `references/config.md` for model resolution.
 4. **Gitignore** — `install.py` appends `adws/adw_data/sessions/`, `adws/adw_data/sssf.db*`, and `.env` for you; confirm they landed. All three are runtime or secrets and must never be committed.
 5. **Git repo** — ADWs that end in a commit phase call `git_helper.commit_all`, which raises if the cwd is not a git repository. Run `git init` and make a first commit before using `adw_plan_build.py`, `adw_plan_build_test.py`, or `adw_simple_sdlc.py`. `adw_document.py` needs one too: it measures the change with `git diff` against a base ref (`main` by default, `--base` to override).
-6. **Smoke test** — `just demo` runs two cheap read-only workflows back to back, or run the smallest ADW directly:
+6. **UI testing (optional)** — if this repo has a frontend and you will use `adw_sdlc`, follow [setup_ui_testing.md](setup_ui_testing.md) after the smoke test below. Until then the UI phase is skipped, and each run's log says so.
+7. **Smoke test** — `just demo` runs two cheap read-only workflows back to back, or run the smallest ADW directly:
 
 ```bash
 just demo                                                    # both, end to end

@@ -26,7 +26,8 @@ Plan the work described in `prompt`.
    - **Copy it, do not retype it.** One bash call does the whole step:
      `mkdir -p specs && cp "<context_handoff_dir>/plan.md" "specs/<adw_id>_<slug>.md"`
      Writing the plan a second time through `write` re-emits every line you already wrote, which costs the whole document again in output tokens and lets the two copies drift.
-3. Emit your `Report` JSON, declaring BOTH paths in `artifacts`.
+3. Decide `ui_impact`: true when the work changes anything a user sees or does in the app's UI (pages, components, styles, client behaviour). When true, list `ui_checks` — each one a single behaviour a tester can observe in a browser ("Clicking Reset sets the counter to 0"), not an implementation detail. Backend-only work: `ui_impact: false`, `ui_checks: []`.
+4. Emit your `Report` JSON, declaring BOTH paths in `artifacts`.
 
 ## Report
 
@@ -38,7 +39,9 @@ Respond with ONLY valid JSON matching `PlanOutput` — no prose before or after:
   "summary": "<one sentence describing the plan>",
   "artifacts": ["<context_handoff_dir>/plan.md", "specs/<adw_id>_<slug>.md"],
   "commit_message": "<imperative one-line git subject for committing THIS PLAN DOCUMENT, not the work it describes — e.g. 'Add spec for the /health endpoint'>",
-  "notes_for_next_agent": "<what the builder must know>"
+  "notes_for_next_agent": "<what the builder must know>",
+  "ui_impact": false,
+  "ui_checks": ["<one observable browser behaviour per entry; empty when ui_impact is false>"]
 }
 ```
 

@@ -101,3 +101,22 @@ agents:
       - Write                      # document.md into context_handoff/
       - Bash(mkdir -p app_docs)    # the prompt's one-call copy into app_docs/
       - Bash(cp:*)
+
+  # Only used by adw_sdlc, and only when quality.UI_APP is set up and the change
+  # touches the UI. See cookbooks/setup_ui_testing.md.
+  - name: ui_tester
+    model: anthropic/claude-sonnet-5-5
+    thinking: medium
+    color: "#34d399"
+    purpose: Verify in a real browser that the change does what the plan says a user will see; change nothing.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/ui_tester/system.md
+      user: adws/adw_data/prompt_engineering/ui_tester/user.md
+    harness_engineering:           # Claude Code: MCP configs, rendered per run like prompts
+      - adws/adw_data/harness_engineering/playwright.mcp.json
+    writes: []                     # screenshots go to context_handoff/, never the repo
+    tools:
+      - Read                       # look at its own screenshots and plan.md
+      - mcp__playwright            # every Playwright browser tool: click, type, navigate, tabs, ...
+    disallowed_tools:              # ...except the one that reaches past the browser
+      - mcp__playwright__browser_run_code_unsafe   # arbitrary code in the MCP server's Node process

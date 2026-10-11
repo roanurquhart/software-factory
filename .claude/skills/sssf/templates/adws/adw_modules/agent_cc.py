@@ -11,7 +11,8 @@ Tool restriction is two layers, both from the agent's `tools` list:
                    permission-rule syntax, e.g. `Bash(git diff:*)`
 With --permission-mode dontAsk, anything not allowed is denied, never prompted.
 --restricted drops user/project settings and confines file tools to the repo;
---strict-mcp-config drops every MCP server. The agent sees only what it names.
+--strict-mcp-config drops every MCP server except the agent's own
+`harness_engineering` MCP configs. The agent sees only what it names.
 """
 
 from __future__ import annotations
@@ -53,10 +54,15 @@ def check_installed() -> None:
 
 
 def tool_flags(tools: Optional[list[str]]) -> list[str]:
-    """`["Read", "Bash(git diff:*)"]` -> --tools Read,Bash --allowedTools Read "Bash(git diff:*)"."""
+    """`["Read", "Bash(git diff:*)", "mcp__playwright__browser_click"]` ->
+    --tools Read,Bash --allowedTools Read "Bash(git diff:*)" mcp__playwright__browser_click
+
+    --tools covers built-ins only; MCP tools stay visible but run only when allowed.
+    """
     if tools is None:
         return []                            # None = Claude Code's full default set
-    base = list(dict.fromkeys(t.split("(", 1)[0] for t in tools))
+    base = list(dict.fromkeys(t.split("(", 1)[0] for t in tools
+                              if not t.startswith("mcp__")))
     flags = ["--tools", ",".join(base)]
     if tools:
         flags += ["--allowedTools", *tools]
@@ -156,8 +162,14 @@ def run(request: PiRequest, on_event: Optional[Callable[[dict], None]] = None,
         "--restricted", "--strict-mcp-config",
         *tool_flags(request.tools),
     ]
+    if request.disallowed_tools:
+        cmd += ["--disallowedTools", *request.disallowed_tools]
     for directory in request.add_dirs:
         cmd += ["--add-dir", directory]
+    # harness_engineering for Claude Code = MCP config files, already rendered
+    # per run by agents.execute. --strict-mcp-config keeps them the ONLY servers.
+    for mcp_config in request.extensions:
+        cmd += ["--mcp-config", mcp_config]
     if resuming:
         cmd += ["--resume", cc_session]      # the recorded system prompt is reused
     else:

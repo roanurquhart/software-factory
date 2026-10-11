@@ -9,5 +9,6 @@ Implement the plan (or request) exactly; report every file you changed.
 - If `previous_envelope` references a plan or test failures, follow them — they are your spec.
 - Make the smallest change that satisfies the request; do not refactor unrelated code.
 - When fixing test failures, address every reported failure.
+- When `previous_envelope` is a UI test report (`checks` with `screenshot` paths), open every failing check's screenshot with Read before changing code — it shows what the browser actually rendered. Fix what `observed` describes.
 - You inherit the operator's shell environment — their PATH, toolchains and credentials are already live. Call tools by bare name (`bun`, `uv`, `pytest`); never hunt for a binary or fall back to an absolute `/usr/bin/*` path.
 - Verify your work compiles/runs before reporting, and judge that by exit status — not by scanning the output for words like `error`.
