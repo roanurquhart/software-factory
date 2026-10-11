@@ -1,0 +1,103 @@
+# sssf.claude.config.yaml — Claude Code roster. The pi roster (sssf.config.yaml) is untouched.
+# Select it per run:  --config adws/adw_sssf_config/sssf.claude.config.yaml
+#                or:  SSSF_CONFIG=adws/adw_sssf_config/sssf.claude.config.yaml just plan-build "..."
+#
+# Auth is your Claude Code login; no API key goes in .env.
+#
+# `tools` drives two Claude Code flags (see adw_modules/agent_cc.py):
+#   --tools         the base names (Read, Bash, ...) — every other built-in tool is gone
+#   --allowedTools  the full entries — `Bash(git diff:*)` allows only that command prefix
+# Runs use --permission-mode dontAsk: anything not listed is denied, never prompted.
+# Read-only shell commands (ls, cat, ...) are allowed by Claude Code itself
+# whenever Bash is present at all. No MCP servers, no user/project settings.
+#
+# `writes` is still the real boundary, enforced after every call in permissions.py.
+defaults:
+  coding_agent: claude_code
+  model: anthropic/claude-opus-5-5
+  thinking: high                   # maps to --effort: low | medium | high | xhigh | max
+  tools: [Read, Grep, Glob]        # floor for any agent that names none
+  protected_files:
+    - adws/adw_modules/
+    - adws/adw_sssf_config/
+    - adws/adw_*.py
+  data_dir: adws/adw_data
+
+observability:
+  db: adws/adw_data/sssf.db
+  poll_ms: 500
+
+agents:
+  - name: planner
+    model: anthropic/claude-opus-5-5
+    thinking: high
+    color: "#a78bfa"
+    purpose: Turn a request into a plan the builder can implement without asking questions.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/planner/system.md
+      user: adws/adw_data/prompt_engineering/planner/user.md
+    writes:
+      - specs/
+    tools:
+      - Read
+      - Grep
+      - Glob
+      - Write                      # plan.md into context_handoff/
+      - Bash(mkdir -p specs)       # the prompt's one-call copy into specs/ — nothing else in bash
+      - Bash(cp:*)
+
+  - name: builder
+    model: anthropic/claude-haiku-5-5
+    thinking: medium
+    color: "#22d3ee"
+    purpose: Implement the plan exactly; report every changed file in the envelope.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/builder/system.md
+      user: adws/adw_data/prompt_engineering/builder/user.md
+    # No `writes`: unrestricted except protected_files.
+    tools:
+      - Read
+      - Grep
+      - Glob
+      - Edit
+      - Write
+      - Bash                       # unrestricted: builds, installs, running what it wrote
+
+  - name: reviewer
+    model: anthropic/claude-opus-5-5
+    thinking: high
+    color: "#fb7185"
+    purpose: Confirm that what was built is what was asked for; change nothing.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/reviewer/system.md
+      user: adws/adw_data/prompt_engineering/reviewer/user.md
+    writes: []
+    tools:
+      - Read
+      - Grep
+      - Glob
+      - Write                      # review.md into context_handoff/
+      - Bash(git diff:*)           # see what changed; no other shell
+      - Bash(git log:*)
+      - Bash(git status:*)
+
+  - name: documenter
+    model: anthropic/claude-haiku-5-5
+    thinking: medium
+    color: "#e879f9"
+    purpose: Write up the change that was just made, from the diff; document only.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/documenter/system.md
+      user: adws/adw_data/prompt_engineering/documenter/user.md
+    writes:
+      - app_docs/
+      - docs/
+      - "**/*.md"
+      - "*.md"
+    tools:
+      - Read                       # the diff arrives as a file (diff_path); no git needed
+      - Grep
+      - Glob
+      - Write                      # document.md into context_handoff/
+      - Bash(mkdir -p app_docs)    # the prompt's one-call copy into app_docs/
+      - Bash(cp:*)

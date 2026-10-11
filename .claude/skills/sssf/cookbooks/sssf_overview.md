@@ -37,7 +37,7 @@ adws/
     └── sssf.db                  gitignored SQLite trace db the visualizer polls
 ```
 
-**v1 runs Pi only.** `coding_agent: pi`, default model `gemini-3.6-flash`, thinking `medium`. `claude_code` is specced in the config and stubbed in the interface — it lands in v2.
+**Pi is the default.** `coding_agent: pi`, default model `gemini-3.6-flash`, thinking `medium`. `claude_code` runs through `agent_cc.py`; `sssf.claude.config.yaml` is the Claude Code roster.
 
 ## The phase model
 

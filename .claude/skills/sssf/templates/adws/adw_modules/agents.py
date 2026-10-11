@@ -15,7 +15,7 @@ from typing import Optional
 
 import yaml
 
-from . import agent_pi, permissions, prompts
+from . import agent_cc, agent_pi, permissions, prompts
 from .data_types import (AgentCall, AgentConfig, EnvelopeBase, EventRecord,
                          GateCheck, GateReport, Phase, PiRequest, SSSFConfig,
                          UsageBreakdown)
@@ -58,15 +58,19 @@ def validate(cfg: SSSFConfig, required: list[str]) -> None:
         except SystemExit as e:
             problems.append(str(e))
             continue
-        if agent.coding_agent != "pi":
-            problems.append(f"agent {name!r}: coding_agent {agent.coding_agent!r} "
-                            f"is not implemented in v1 (pi only)")
         for label, ref in (("system", agent.prompt_engineering.system),
                            ("user", agent.prompt_engineering.user)):
             if not Path(ref).is_file():
                 problems.append(f"agent {name!r}: {label} prompt not found: {ref}")
         try:
-            agent_pi.resolve_model(agent.model)
+            if agent.coding_agent == "claude_code":
+                agent_cc.check_installed()
+                agent_cc.resolve_model(agent.model)
+                if agent.harness_engineering:
+                    raise ValueError("harness_engineering is pi-only (extensions); "
+                                     "remove it for coding_agent: claude_code")
+            else:
+                agent_pi.resolve_model(agent.model)
         except ValueError as e:
             problems.append(f"agent {name!r}: {e}")
     if problems:
@@ -123,10 +127,11 @@ def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
             tools=agent.tools,
             extensions=agent.harness_engineering,
             cwd=str(run.repo_root),
+            add_dirs=[str(run.session_dir.resolve())],
         )
-        result = agent_pi.run(
+        result = _backend(agent).run(
             request,
-            on_event=_event_forwarder(run, phase, agent.name),
+            on_event=_event_forwarder(run, phase, agent),
             on_spawn=lambda pid: run.tracer.process_start(
                 run.adw_id, "agent", agent.name, pid,
                 f"{agent.coding_agent} {agent.name} {agent.model}"),
@@ -232,22 +237,28 @@ def _agent_session_id(run, agent: AgentConfig) -> str:
     return f"sssf-{run.adw_id}-{agent.name}-{new_id(4)}"
 
 
-def _event_forwarder(run, phase: Phase, agent_name: str):
+def _event_forwarder(run, phase: Phase, agent: AgentConfig):
     """One tool_call event per real tool call, with its exact args and result."""
-    tracker = agent_pi.ToolCallTracker()
+    tracker = _backend(agent).ToolCallTracker()
 
     def forward(event: dict) -> None:
-        record = tracker.observe(event)
-        if record is None:
-            return
-        # The call's span rides the columns; duration_ms stays in the payload as
-        # pi's own authoritative number.
-        run.tracer.event(EventRecord(adw_id=run.adw_id, phase_id=phase.phase_id,
-                                     type="tool_call", name=record.pop("label"),
-                                     started_at=record.pop("started_at", None),
-                                     ended_at=record.pop("ended_at", None),
-                                     payload={**record, "agent": agent_name}))
+        found = tracker.observe(event)
+        # pi's tracker returns one record or None; Claude Code's returns a list.
+        records = found if isinstance(found, list) else [found] if found else []
+        for record in records:
+            # The call's span rides the columns; duration_ms stays in the payload
+            # as the coding agent's own authoritative number.
+            run.tracer.event(EventRecord(adw_id=run.adw_id, phase_id=phase.phase_id,
+                                         type="tool_call", name=record.pop("label"),
+                                         started_at=record.pop("started_at", None),
+                                         ended_at=record.pop("ended_at", None),
+                                         payload={**record, "agent": agent.name}))
     return forward
+
+
+def _backend(agent: AgentConfig):
+    """The coding-agent interface module for this agent."""
+    return agent_cc if agent.coding_agent == "claude_code" else agent_pi
 
 
 def _extract_json(text: str) -> dict:

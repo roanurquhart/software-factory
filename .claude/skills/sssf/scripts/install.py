@@ -23,6 +23,7 @@ TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 GITIGNORE_ENTRIES = [
     "adws/adw_data/sessions/",
     "adws/adw_data/sssf.db*",
+    "adws/adw_data/worktrees/",     # adw_sdlc runs each request in its own worktree here
     ".env",
     # The ADWs are Python, so importing adw_modules writes bytecode next to it.
     # Chains that end in a commit phase call `git add -A`, so without this a
@@ -73,6 +74,9 @@ def main() -> int:
           root / "adws" / "adw_data" / "harness_engineering", args.force, stamped, skipped)
     stamp(TEMPLATES / "sssf.config.yaml",
           root / "adws" / "adw_sssf_config" / "sssf.config.yaml",
+          args.force, stamped, skipped)
+    stamp(TEMPLATES / "sssf.claude.config.yaml",
+          root / "adws" / "adw_sssf_config" / "sssf.claude.config.yaml",
           args.force, stamped, skipped)
     stamp(TEMPLATES / "env.sample", root / ".env.sample", args.force, stamped, skipped)
     # The recipes are part of the operating experience, and several cookbooks

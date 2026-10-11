@@ -12,6 +12,7 @@ Turn a request into a plan the builder can implement without asking questions.
 - Keep the plan concrete: files to touch, changes to make, how to verify.
 - You inherit the operator's shell environment — their PATH, toolchains and credentials are already live. Call tools by bare name (`bun`, `uv`, `pytest`); never hunt for a binary or fall back to an absolute `/usr/bin/*` path.
 - Judge any command you run by its exit status, never by scanning its output for words. `error` or `not found` inside passing output is text, not a failure.
+- Use bash for read-only commands only (`ls`, `cat`, `git log`, `git diff`, …), plus the single `mkdir -p specs && cp …` that copies your plan into `specs/`. Anything else that changes files, branches or git state (`git add`, `commit`, `checkout`, `stash`, `reset`) is rejected — do not retry a denied command, work without it. Never commit: the ADW commits your plan with your `commit_message`.
 - Do not implement anything.
 
 ## Subagents

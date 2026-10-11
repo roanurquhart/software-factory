@@ -383,6 +383,25 @@ class PiRequest(BaseModel):
     tools: Optional[list[str]] = None
     extensions: list[str] = Field(default_factory=list)
     cwd: str = "."                  # set from run.repo_root — the codebase root agents work in
+    # Dirs outside cwd the agent must reach — the session runtime, when the run
+    # works in a worktree. Claude Code confines file tools without them; pi ignores it.
+    add_dirs: list[str] = Field(default_factory=list)
+
+
+class BranchFlow(BaseModel):
+    """How adw_sdlc branches and ships: fork from `base`, PR back into it."""
+
+    base: str = "main"
+    open_pr: bool = True            # False: branch and commit locally, no push, no PR
+
+
+class PullRequest(BaseModel):
+    """One `gh pr create`: what a code phase needs to open a run's PR."""
+
+    branch: str
+    base: str
+    title: str
+    body: str
 
 
 class UsageBreakdown(BaseModel):
