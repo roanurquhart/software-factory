@@ -59,13 +59,24 @@ def json_parses(envelope: EnvelopeBase, run) -> GateReport:
 
 
 def diff_matches_claims(envelope: EnvelopeBase, run) -> GateReport:
-    """Every file claimed changed must exist on disk."""
+    """Every file claimed changed must exist on disk, or be deleted per git."""
     report = GateReport()
+    deleted = _deleted_files()
     for f in getattr(envelope, "changed_files", []):
         p = Path(f)
-        report.check(f, p.exists(),
-                     f"exists, {_size(p)}" if p.exists() else "claimed changed file does not exist")
+        if p.exists():
+            report.check(f, True, f"exists, {_size(p)}")
+        else:
+            report.check(f, f in deleted,
+                         "deleted" if f in deleted else "claimed changed file does not exist")
     return report
+
+
+def _deleted_files() -> set[str]:
+    """Files git sees as deleted relative to HEAD, staged or not."""
+    out = subprocess.run(["git", "diff", "--name-only", "--diff-filter=D", "HEAD"],
+                         capture_output=True, text=True)
+    return set(out.stdout.split()) if out.returncode == 0 else set()
 
 
 def verdict_consistent(envelope: EnvelopeBase, run) -> GateReport:
