@@ -5,7 +5,7 @@
 """ADW SDLC — the full chain in its own worktree and branch, ending in a pull request.
 
 Usage:
-    uv run adws/adw_sdlc.py "<prompt or path/to/prompt.md>" [--config adws/adw_sssf_config/sssf.config.yaml] [--adw-id a1b2c3d4] [--base main] [--no-pr]
+    uv run adws/adw_sdlc.py "<prompt or path/to/prompt.md>" [--config adws/adw_sssf_config/sssf.config.yaml] [--adw-id a1b2c3d4] [--base main] [--no-pr] [--reference path/to/file ...]
 
 Phases: engineer(request) -> git(worktree) -> planner -> git(commit_plan)
         -> builder -> code(test) [-> builder(fix) -> code(test) ... bounded]
@@ -34,6 +34,10 @@ from); git and gh do the work.
 The run record stays in the main checkout (sessions, sssf.db), so the
 dashboard shows worktree runs like any other.
 
+`--reference` hands the agents files that are not in the repo (screenshots,
+mockups, a PDF). Code copies them into the worktree under .sssf/reference/,
+kept out of git, and appends their paths to the request.
+
 A run that is not accepted — red suite or rejected review — stops before the
 push: nothing leaves the machine, and the worktree stays for the engineer to
 inspect. An accepted run pushes, opens the PR, and removes its worktree; the
@@ -43,6 +47,7 @@ push, no PR.
 
 import argparse
 import sys
+from pathlib import Path
 
 from adw_modules import (agents, changes, gates, git_helper, pull_request,
                          quality, session, ui, utils, worktree)
@@ -96,7 +101,13 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
         baseline = git_helper.rev(base)
         path, branch = worktree.create(root, cfg.defaults.data_dir, run.adw_id, base)
         worktree.enter(run, path)
-        ph.log(branch=branch, path=str(path), baseline=git_helper.short_sha(baseline))
+        references = worktree.add_references(path, flow.references)
+        if references:
+            prompt += ("\n\n## Reference files\n\nThe engineer attached these files. They are in "
+                       "the worktree, kept out of git; open them with your Read tool:\n"
+                       + "\n".join(f"- `{r}`" for r in references))
+        ph.log(branch=branch, path=str(path), baseline=git_helper.short_sha(baseline),
+               references=references)
 
     with run.phase(PhaseParams(name="plan", kind="agent", owner="planner",
                                description="Turn the request into an implementable plan")) as ph:
@@ -259,6 +270,12 @@ if __name__ == "__main__":
     parser.add_argument("--adw-id", default=None, help="join or pin an existing session")
     parser.add_argument("--base", default="main", help="branch to fork from and open the PR against")
     parser.add_argument("--no-pr", action="store_true", help="branch and commit only; no push, no PR")
+    parser.add_argument("--reference", action="append", default=[], metavar="FILE",
+                        help="a file for the agents to read (image, doc); repeatable")
     args = parser.parse_args()
+    missing = [f for f in args.reference if not Path(f).is_file()]
+    if missing:
+        parser.error(f"--reference file(s) not found: {', '.join(missing)}")
     sys.exit(main(utils.resolve_prompt(args.prompt), args.config, args.adw_id,
-                  BranchFlow(base=args.base, open_pr=not args.no_pr)))
+                  BranchFlow(base=args.base, open_pr=not args.no_pr,
+                             references=[str(Path(f).resolve()) for f in args.reference])))

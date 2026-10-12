@@ -61,7 +61,8 @@ simple-sdlc *ARGS:
     uv run adws/adw_simple_sdlc.py --config {{config}} "$@"
 
 # the full chain on its own branch + worktree, ending in a PR: just ship "add a /health endpoint"
-# (add --no-pr to keep it local, --base <branch> to fork from something other than main)
+# (add --no-pr to keep it local, --base <branch> to fork from something other than main,
+#  --reference <file> to hand the agents a screenshot or doc; repeatable)
 ship *ARGS:
     uv run adws/adw_sdlc.py --config {{config}} "$@"
 

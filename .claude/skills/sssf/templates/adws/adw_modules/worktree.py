@@ -10,6 +10,7 @@ and the dashboard see a worktree run exactly like any other.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -57,6 +58,35 @@ def create(root: Path, data_dir: str, adw_id: str, base: str) -> tuple[Path, str
     else:
         _git("worktree", "add", "-b", branch, str(path), base, cwd=root)
     return path, branch
+
+
+REFERENCE_DIR = ".sssf/reference"
+
+
+def add_references(path: Path, files: list[str]) -> list[str]:
+    """Copy reference files (screenshots, mockups, docs) into the worktree.
+
+    Agents only read inside their worktree and session dir, so a file the
+    engineer hands over must land in the worktree. It goes under .sssf/, which
+    is added to git's local exclude list: agents can read it, nothing commits
+    it, and the permission snapshot never sees it as a change.
+    Returns the copies' paths relative to the worktree root.
+    """
+    if not files:
+        return []
+    exclude = Path(_git("rev-parse", "--path-format=absolute", "--git-path", "info/exclude", cwd=path))
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    lines = exclude.read_text().splitlines() if exclude.exists() else []
+    if ".sssf/" not in lines:
+        exclude.write_text("\n".join(lines + [".sssf/"]) + "\n")
+    dest = path / REFERENCE_DIR
+    dest.mkdir(parents=True, exist_ok=True)
+    copied = []
+    for f in files:
+        src = Path(f)
+        shutil.copy2(src, dest / src.name)
+        copied.append(f"{REFERENCE_DIR}/{src.name}")
+    return copied
 
 
 def enter(run, path: Path) -> None:

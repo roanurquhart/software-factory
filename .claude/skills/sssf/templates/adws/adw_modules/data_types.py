@@ -444,6 +444,7 @@ class BranchFlow(BaseModel):
 
     base: str = "main"
     open_pr: bool = True            # False: branch and commit locally, no push, no PR
+    references: list[str] = Field(default_factory=list)  # absolute paths, copied into the worktree
 
 
 class PrParts(BaseModel):
