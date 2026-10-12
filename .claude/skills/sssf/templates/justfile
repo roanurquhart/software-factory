@@ -60,11 +60,15 @@ sdlc *ARGS:
 simple-sdlc *ARGS:
     uv run adws/adw_simple_sdlc.py --config {{config}} "$@"
 
+# Add --no-pr to keep it local, --base <branch> to fork from something other than
+# main, --reference <file> to hand the agents a screenshot or doc (repeatable).
 # the full chain on its own branch + worktree, ending in a PR: just ship "add a /health endpoint"
-# (add --no-pr to keep it local, --base <branch> to fork from something other than main,
-#  --reference <file> to hand the agents a screenshot or doc; repeatable)
 ship *ARGS:
     uv run adws/adw_sdlc.py --config {{config}} "$@"
+
+# ship with the builder on Opus, for design-heavy work: just ship-design "redo the header"
+ship-design *ARGS:
+    uv run adws/adw_design_heavy_sdlc.py --config {{config}} "$@"
 
 # ── watch it ────────────────────────────────────────────────────────────────
 # Reads never block a running workflow, the db is WAL. Poll as hard as you like.

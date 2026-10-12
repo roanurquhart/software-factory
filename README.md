@@ -130,7 +130,7 @@ Everything lives in `.claude/skills/sssf/`. `SKILL.md` carries the hard rules an
 | What lands in your repo | Where it comes from | Tracked |
 |---|---|---|
 | `adws/adw_sssf_config/sssf.config.yaml` | `templates/sssf.config.yaml` | yes, it is your agent roster |
-| `adws/adw_*.py` | `templates/adws/` | yes, twelve starter workflows |
+| `adws/adw_*.py` | `templates/adws/` | yes, fourteen starter workflows |
 | `adws/adw_modules/` | `templates/adws/adw_modules/` | yes, all low-level logic |
 | `adws/adw_data/prompt_engineering/` | `templates/prompt_engineering/` | yes, **your prompts live here** |
 | `adws/adw_data/harness_engineering/` | `templates/harness_engineering/` | yes, pi extensions |
@@ -299,7 +299,7 @@ super-simple-software-factory/          # the deployable factory, and nothing el
         ├── prompt_engineering/{agent}/ # system.md + user.md per agent
         ├── harness_engineering/        # pi extensions
         └── adws/
-            ├── adw_*.py                # the twelve starter workflows
+            ├── adw_*.py                # the fourteen starter workflows
             └── adw_modules/            # ALL low-level logic, ADW scripts stay thin
 ```
 
@@ -307,7 +307,7 @@ The skill is also what an agent reads to *operate* the factory. `SKILL.md` is th
 
 ---
 
-## The twelve starter workflows
+## The fourteen starter workflows
 
 Every ADW takes the same shape:
 
@@ -329,8 +329,24 @@ uv run adws/adw_*.py "<prompt or path/to/prompt.md>" [--config adws/adw_sssf_con
 | `adw_plan_build_test_quality` | same, plus lint/typecheck/build gates | the repo has quality commands worth enforcing |
 | `adw_document` | code(git diff), documenter | write up what just shipped |
 | `adw_simple_sdlc` | plan, build, test, review, document | the work is real and its shape is not obvious |
+| `adw_sdlc` | `adw_simple_sdlc` in its own worktree and branch, plus a UI test, ending in a PR | real work you want reviewed as a PR, without touching your checkout |
+| `adw_design_heavy_sdlc` | `adw_sdlc` with the builder on Opus | the build itself needs taste: visual design, layout, animation, a UI rebuilt from references |
 
 `adw_simple_sdlc` lands three commits from three authors. The plan, the code, and the write-up each get their own, and each message is the words of the agent that produced it.
+
+### Parallel runs for parallel work
+
+When a request splits into goals that don't touch the same files (say, "restyle the header", "add a projects page", "fix the footer links"), don't send it as one big run. Split it into one request per goal and launch one `adw_sdlc` (or `adw_design_heavy_sdlc`) per goal, **at the same time**. Each run gets its own worktree, branch and PR, so they can't step on each other, and the trace db shows them side by side.
+
+```bash
+just ship requests/header.md   &
+just ship requests/projects.md &
+just ship requests/footer.md   &
+```
+
+- **Split by files, not by topic.** Two goals that edit the same file will conflict at merge time. Run those one after the other instead, and fork the second from the first with `--base sssf/<first-adw-id>`.
+- **Write each request so it stands alone.** Every run plans from scratch and can't see what the others are doing.
+- **Every run is a full chain.** N runs cost N times as much and draw on the same usage limits, so parallelize when the goals are really independent, not by reflex.
 
 `--adw-id` is optional everywhere. Omit it and a fresh id is minted and printed. Supply it and the run joins that session: same dirs, same `context_handoff/`, and each agent **resumes its existing context window** through `agent_map.json` instead of starting cold. That is how you chain workflows.
 

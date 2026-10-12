@@ -31,7 +31,7 @@ Every check still holds. Runs execute from the main checkout (worktrees never ne
 |---|---|---|
 | `adws/adw_sssf_config/sssf.config.yaml` | `templates/sssf.config.yaml` | yes — the agent roster |
 | `.env.sample` | `templates/env.sample` | yes |
-| `adws/adw_*.py` | `templates/adws/` | yes — the thirteen starter ADWs |
+| `adws/adw_*.py` | `templates/adws/` | yes — the fourteen starter ADWs |
 | `adws/adw_modules/` | `templates/adws/adw_modules/` | yes — all low-level logic |
 | `adws/adw_data/prompt_engineering/{planner,builder,scout,reviewer,documenter}/` | `templates/prompt_engineering/` | yes — **the user-owned home for prompts** |
 | `adws/adw_data/harness_engineering/` | `templates/harness_engineering/` | yes — **the user-owned home for pi extensions** |

@@ -68,8 +68,13 @@ DOCUMENT_NOTES = ("Read diff_path in full before writing. Document only what the
 
 def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
          adw_id: str | None = None, flow: BranchFlow = BranchFlow()) -> int:
+    return run_chain(agents.load_config(config), prompt, adw_id, flow)
+
+
+def run_chain(cfg, prompt: str, adw_id: str | None = None, flow: BranchFlow = BranchFlow()) -> int:
+    """The whole chain on an already-loaded roster, so variants (adw_design_heavy_sdlc)
+    can adjust the config without copying the chain."""
     base, open_pr = flow.base, flow.open_pr
-    cfg = agents.load_config(config)
     root = git_helper.repo_root()
     worktree.anchor(cfg, root)            # the run record stays in this checkout
     # ui_tester is only required once UI testing is set up in quality.UI_APP.
@@ -266,8 +271,9 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
                              f"worktree kept at {path}")
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
+def parse_args(description: str = __doc__) -> tuple[str, str, str | None, BranchFlow]:
+    """The CLI every adw_sdlc variant shares: (prompt, config, adw_id, flow)."""
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("prompt", help="inline text or a path to a prompt file")
     parser.add_argument("--config", default="adws/adw_sssf_config/sssf.config.yaml")
     parser.add_argument("--adw-id", default=None, help="join or pin an existing session")
@@ -279,6 +285,10 @@ if __name__ == "__main__":
     missing = [f for f in args.reference if not Path(f).is_file()]
     if missing:
         parser.error(f"--reference file(s) not found: {', '.join(missing)}")
-    sys.exit(main(utils.resolve_prompt(args.prompt), args.config, args.adw_id,
-                  BranchFlow(base=args.base, open_pr=not args.no_pr,
-                             references=[str(Path(f).resolve()) for f in args.reference])))
+    return (utils.resolve_prompt(args.prompt), args.config, args.adw_id,
+            BranchFlow(base=args.base, open_pr=not args.no_pr,
+                       references=[str(Path(f).resolve()) for f in args.reference]))
+
+
+if __name__ == "__main__":
+    sys.exit(main(*parse_args()))

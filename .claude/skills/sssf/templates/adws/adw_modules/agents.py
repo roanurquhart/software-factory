@@ -41,6 +41,13 @@ def load_config(path: str = "adws/adw_sssf_config/sssf.config.yaml") -> SSSFConf
     return SSSFConfig(**raw)
 
 
+def override_models(cfg: SSSFConfig, models: dict[str, str]) -> None:
+    """Swap the model of named agents in a loaded roster, for ADW variants that
+    need a stronger (or cheaper) model in one seat. Unknown names fail loudly."""
+    for name, model in models.items():
+        resolve(cfg, name).model = model
+
+
 def resolve(cfg: SSSFConfig, name: str) -> AgentConfig:
     for agent in cfg.agents:
         if agent.name == name:

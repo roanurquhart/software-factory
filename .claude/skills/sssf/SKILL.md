@@ -23,6 +23,8 @@ Three steps. Then stop.
 | adw_simple_sdlc | plan → build → test → review → document, 3 commits | the work is real and its shape is not obvious |
 ```
 
+**Parallelizable work runs in parallel.** When a request splits into goals that touch different files, split it into one request per goal and launch one `adw_sdlc` (or `adw_design_heavy_sdlc` for design-heavy builds) per goal, all at once. Each gets its own worktree, branch and PR. Goals that share files run one after another, with the later one forked from the earlier via `--base`. Details in [cookbooks/run_adw.md](cookbooks/run_adw.md).
+
 **Nothing else.** No trace-db queries, no reading the config or the ADW scripts' bodies, no repo inventory, no last-runs summary, no diagnosing an old failure, no "current state" dashboard. None of it was asked for, and it is not free:
 
 - **Volunteered state is guessed state.** An orchestrator that improvised a status board queried a `runs` table and a `payload` column — neither exists (`sessions`, `payload_json`). The spec that would have said so is `references/observability.md`, one lazy read away. Probing to look prepared is how you end up confidently wrong in your first message.
