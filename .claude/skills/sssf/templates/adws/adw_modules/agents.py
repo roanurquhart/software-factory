@@ -89,6 +89,7 @@ def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
         "prompt": call.prompt,
         "previous_envelope": call.previous.model_dump_json(indent=2) if call.previous else "(none)",
         "context_handoff_dir": str(run.context_handoff_dir),
+        "records": run.cfg.defaults.records,
     }
     system_text = prompts.render(agent.prompt_engineering.system, variables)
     user_text = prompts.render(agent.prompt_engineering.user, variables)
@@ -147,6 +148,7 @@ def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
     # send in this phase — first prompt, JSON retries, gate corrections — is
     # measured against this one baseline.
     tree_before = permissions.snapshot(run)
+    protected_before = permissions.protected_snapshot(run)
 
     result = send(user_text)
     envelope, attempt = _parse_with_retries(run, phase, call, result, send)
@@ -183,7 +185,7 @@ def execute(run, phase: Phase, call: AgentCall) -> EnvelopeBase:
     # accepted: an agent does not get to report success on a phase in which it
     # wrote somewhere it was not allowed to.
     try:
-        touched = permissions.enforce(run, phase, agent, tree_before)
+        touched = permissions.enforce(run, phase, agent, tree_before, protected_before)
     except permissions.PermissionBreach as breach:
         run.tracer.event(EventRecord(adw_id=run.adw_id, phase_id=phase.phase_id,
                                      type="error", name="permission_breach",

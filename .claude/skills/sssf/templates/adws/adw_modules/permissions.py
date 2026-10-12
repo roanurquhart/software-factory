@@ -27,6 +27,13 @@ happened. It aborts the phase and names every offending path.
 Two keys drive it, both in sssf.config.yaml:
     defaults.protected_files   paths no agent may touch unless it names them itself
     agents[].writes      None = unrestricted · [] = read-only · [...] = only these
+
+`git status` cannot see everything that matters. In a worktree run the factory
+lives in the MAIN checkout, outside the tree being diffed; and a factory that
+is gitignored or excluded (installed with --local) never shows up in a diff at
+all. So protected files are also fingerprinted by content, in the main
+checkout and in the worktree, tracked or not: `protected_snapshot()` keeps
+their bytes before an agent runs, and `enforce()` restores any it changed.
 """
 
 from __future__ import annotations
@@ -66,6 +73,49 @@ def snapshot(run) -> dict[str, str]:
         if path.strip():
             fingerprints[path.strip()] = "untracked"
     return fingerprints
+
+
+def _protected_files(root: Path, pattern: str):
+    """Files under `root` matching one protected pattern, as repo-relative paths."""
+    literal = re.split(r"[*?]", pattern, maxsplit=1)[0]
+    base = root / literal.rsplit("/", 1)[0] if "/" in literal else root
+    if not base.is_dir():
+        return
+    for path in base.rglob("*"):
+        if path.is_file() and "__pycache__" not in path.parts:
+            rel = path.relative_to(root).as_posix()
+            if _matches(rel, pattern):
+                yield rel
+
+
+def protected_snapshot(run) -> dict[tuple[str, str], bytes]:
+    """The bytes of every protected file, keyed by (root, relative path).
+
+    Covers the main checkout (where the factory runs from) and the tree the
+    agent works in, whether or not git tracks or ignores the files.
+    """
+    roots = dict.fromkeys(str(Path(r).resolve())
+                          for r in (getattr(run, "factory_root", run.repo_root), run.repo_root))
+    files: dict[tuple[str, str], bytes] = {}
+    for root in roots:
+        for pattern in run.cfg.defaults.protected_files:
+            for rel in _protected_files(Path(root), pattern):
+                files[(root, rel)] = (Path(root) / rel).read_bytes()
+    return files
+
+
+def _restore(root: str, rel: str, content: bytes | None) -> str:
+    """Put one protected file back the way it was before the agent ran."""
+    path = Path(root) / rel
+    try:
+        if content is None:
+            path.unlink()
+            return "deleted"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return "restored"
+    except OSError as error:
+        return f"could not restore ({error})"
 
 
 def changed_paths(before: dict[str, str], after: dict[str, str]) -> list[str]:
@@ -160,7 +210,8 @@ def _roll_back(run, path: str, before: dict[str, str], after: dict[str, str]) ->
     return "rolled back" if result.returncode == 0 else "could not roll back"
 
 
-def enforce(run, phase, agent: AgentConfig, before: dict[str, str]) -> list[str]:
+def enforce(run, phase, agent: AgentConfig, before: dict[str, str],
+            protected_before: dict[tuple[str, str], bytes] | None = None) -> list[str]:
     """Compare the tree against `before`; undo and raise if the agent overstepped.
 
     Returns the paths it legitimately changed, so the trace records what an
@@ -173,10 +224,24 @@ def enforce(run, phase, agent: AgentConfig, before: dict[str, str]) -> list[str]
     after = snapshot(run)
     touched = changed_paths(before, after)
     breaches = [p for p in touched if not permitted(p, agent, run.cfg)]
-    if not breaches:
-        return touched
-
     outcomes = {p: _roll_back(run, p, before, after) for p in breaches}
+
+    # Content check over protected files the git diff cannot see.
+    if protected_before is not None:
+        protected_after = protected_snapshot(run)
+        for key in sorted(set(protected_before) | set(protected_after)):
+            root, rel = key
+            if protected_before.get(key) == protected_after.get(key):
+                continue
+            if permitted(rel, agent, run.cfg):
+                continue
+            label = rel if root == str(Path(run.repo_root).resolve()) else f"{root}/{rel}"
+            if label in outcomes:
+                continue
+            outcomes[label] = _restore(root, rel, protected_before.get(key))
+    if not outcomes:
+        return touched
+    breaches = list(outcomes)
     scope = ("read-only" if agent.writes == []
              else f"limited to {agent.writes}" if agent.writes
              else f"barred from {run.cfg.defaults.protected_files}")

@@ -51,6 +51,8 @@ class Run:
         self.cost = 0.0
         self._seq = tracer.max_phase_seq(adw_id)   # a joined run continues the sequence
         self.repo_root = git_helper.repo_root()    # where every agent is spawned to work
+        self.factory_root = self.repo_root         # the main checkout; never moves into a worktree
+        self.seals: dict[str, str] = {}            # records: session — path -> sha256 of each record
         self.session_dir = ensure_dir(Path(cfg.defaults.data_dir) / "sessions" / adw_id)
         self.context_handoff_dir = ensure_dir(self.session_dir / "context_handoff")
         self._agent_map_path = self.session_dir / "agent_map.json"
