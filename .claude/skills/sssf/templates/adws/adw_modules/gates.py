@@ -74,7 +74,7 @@ def diff_matches_claims(envelope: EnvelopeBase, run) -> GateReport:
 
 def _deleted_files() -> set[str]:
     """Files git sees as deleted relative to HEAD, staged or not."""
-    out = subprocess.run(["git", "diff", "--name-only", "--diff-filter=D", "HEAD"],
+    out = subprocess.run(["git", "diff", "--name-only", "--no-renames", "--diff-filter=D", "HEAD"],
                          capture_output=True, text=True)
     return set(out.stdout.split()) if out.returncode == 0 else set()
 
