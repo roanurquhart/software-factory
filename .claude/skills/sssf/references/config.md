@@ -48,8 +48,13 @@ agents:
 | `color` | hex string | Lane color for every agent that does not set its own. Default empty — the visualizer falls back to its own palette. |
 | `harness_engineering` | list[string] | Coding-agent extensions. Pi: extension names. Claude Code: reserved (MCP, hooks). |
 | `tools` | list[string] | Roster-wide tool allowlist. Every agent that omits its own `tools` inherits this. Unset = all tools usable. |
-| `protected_files` | list[string] | Paths **no** agent may modify unless it names them in its own `writes`. Default: `adws/adw_modules/`, `adws/adw_sssf_config/`, `adws/adw_*.py` — an agent must not be able to edit the machinery that decides whether its work passed. |
+| `protected_files` | list[string] | Paths **no** agent may modify unless it names them in its own `writes`. Default: `adws/adw_modules/`, `adws/adw_sssf_config/`, `adws/adw_*.py`, `.sssf/` — an agent must not be able to edit the machinery that decides whether its work passed, or the reference files it was given. |
 | `data_dir` | path | Runtime home. Sessions land at `{data_dir}/sessions/{adw_id}/{agent_name}/`. Default `adws/adw_data`. |
+| `records` | `repo` \| `session` | Where plans and write-ups live. `repo` (default): the planner copies its plan into `specs/` and the documenter its write-up into `app_docs/`, and `adw_sdlc` / `adw_simple_sdlc` commit them. `session`: they stay in the run's `context_handoff/`, nothing but the product change is committed, and the PR body carries them. `install.py --local` sets `session`. |
+
+#### `records: session` — the record without the commit
+
+In `repo` mode, the plan commit is the proof that the plan existed before the code did. In `session` mode, `adw_modules/records.py` keeps that guarantee another way. When a plan or write-up is accepted, it is **sealed**: the sha256 of each record file goes into the trace. `records.verify()` re-hashes every seal before the build commit and before the push, and a record that changed or vanished fails the run. That matters because the session runtime is writable by every agent, so without the seal a later agent could quietly rewrite the plan it is judged against. A planner or documenter that writes anything in the repo in this mode also fails the phase, since that file would otherwise ride into the next commit unannounced.
 
 ### `observability`
 
@@ -141,11 +146,20 @@ Comparing change-sets rather than watching writes is deliberate: a path that was
 modified before the agent ran and is clean afterwards has been **reverted**, and
 a reversion is a modification. That is what catches `git checkout`.
 
+`git status` cannot see everything, though. In a worktree run (`adw_sdlc`) the
+factory lives in the **main** checkout, outside the tree being diffed, and a
+factory installed with `--local` is excluded from git entirely. So protected
+files are also fingerprinted **by content**: before each agent, the bytes of
+every file matching `protected_files` are kept, in the main checkout and in the
+agent's tree, tracked, untracked or ignored; afterwards any that changed,
+appeared or vanished are put back exactly as they were, and the phase fails.
+
 A breach is not a gate violation. Gates are for work an agent can be asked to
 redo; a write has already happened, so re-prompting fixes nothing. Instead:
 
 1. every unauthorized change the agent **introduced** is rolled back — tracked
-   files with `git checkout --`, untracked files by deletion;
+   files with `git checkout --`, untracked files by deletion, protected files
+   from their saved bytes;
 2. a path that was **already dirty** before the agent ran is left untouched. The
    operator had uncommitted work there, and discarding it to tidy up would be
    the same harm this module exists to prevent;
@@ -153,7 +167,7 @@ redo; a write has already happened, so re-prompting fixes nothing. Instead:
 
 ```yaml
 defaults:
-  protected_files: [adws/adw_modules/, adws/adw_sssf_config/, "adws/adw_*.py"]
+  protected_files: [adws/adw_modules/, adws/adw_sssf_config/, "adws/adw_*.py", .sssf/]
 
 agents:
   - name: builder      # no `writes` key -> unrestricted, minus protected_files

@@ -34,6 +34,9 @@ def push(branch: str) -> None:
     _run(["git", "push", "-u", "origin", branch])
 
 
+BODY_LIMIT = 60_000      # GitHub rejects PR bodies over 65,536 characters
+
+
 def body(parts: PrParts) -> str:
     """The PR description, assembled from what the agents reported — nothing invented."""
     plan, review, document, ui = parts.plan, parts.review, parts.document, parts.ui
@@ -46,10 +49,25 @@ def body(parts: PrParts) -> str:
         lines += [f"- [{'x' if c.passed else ' '}] {c.check} — {c.observed}" for c in ui.checks]
     else:
         lines += [parts.ui_note or "Not run."]
-    docs = [path for path in [*plan.artifacts, document.document_path]
-            if path and not Path(path).is_absolute()]
-    if docs:
-        lines += ["", "## Spec and docs", ""] + [f"- `{path}`" for path in dict.fromkeys(docs)]
+    if parts.records == "session":
+        # Nothing but the product change is committed, so the PR carries the
+        # records: the write-up first, then the plan, each folded away.
+        budget = BODY_LIMIT - len("\n".join(lines)) - 500
+        for title, envelope in (("Write-up", document), ("Plan", plan)):
+            for artifact in envelope.artifacts:
+                path = Path(artifact)
+                if path.is_absolute() and path.suffix == ".md" and path.is_file():
+                    text = path.read_text()
+                    if len(text) > budget:
+                        text = text[:max(0, budget)] + "\n\n…(truncated; full copy in the run's session)"
+                    budget -= len(text)
+                    lines += ["", f"<details><summary>{title}</summary>", "", text, "", "</details>"]
+                    break
+    else:
+        docs = [path for path in [*plan.artifacts, document.document_path]
+                if path and not Path(path).is_absolute()]
+        if docs:
+            lines += ["", "## Spec and docs", ""] + [f"- `{path}`" for path in dict.fromkeys(docs)]
     lines += ["", "---", f"SSSF run `{parts.adw_id}`"]
     return "\n".join(lines) + "\n"
 

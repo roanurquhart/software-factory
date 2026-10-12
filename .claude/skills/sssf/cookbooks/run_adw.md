@@ -23,6 +23,12 @@ uv run adws/<recon-chain>.py "where is auth handled" --config path/to/other.conf
 
 The prompt is inline text or a file path. Launch in the background so you can poll while it works; the `adw_id` is printed on startup — capture it, everything else keys off it.
 
+**Files the engineer hands you** (a screenshot of the look they want, a mockup, a PDF) go to `adw_sdlc` with `--reference <file>`, once per file. Agents can only read inside their worktree and session dir, so pasting a path into the prompt is not enough: `--reference` copies each file into the worktree under `.sssf/reference/`, keeps it out of git, and lists the paths in the request. `.sssf/` is in `protected_files`, so no agent can alter a reference.
+
+```bash
+uv run adws/adw_sdlc.py requests/redesign.md --reference ~/Downloads/examples.png
+```
+
 ### Listen for the roster
 
 The chain says *what runs*; the config says *who runs it*. **If the engineer references a roster, a config, or a model tier, pass it — do not fall through to the default.**

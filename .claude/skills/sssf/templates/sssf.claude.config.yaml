@@ -21,7 +21,12 @@ defaults:
     - adws/adw_modules/
     - adws/adw_sssf_config/
     - adws/adw_*.py
+    - .sssf/                       # --reference files copied into a run's worktree
   data_dir: adws/adw_data
+  # Where plans and write-ups live. repo: committed under specs/ and app_docs/.
+  # session: kept in the run's context_handoff/, sealed by hash, never committed,
+  # and carried in the PR body. install.py --local sets session.
+  records: repo
 
 observability:
   db: adws/adw_data/sssf.db

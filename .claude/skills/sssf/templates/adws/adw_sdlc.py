@@ -50,7 +50,7 @@ import sys
 from pathlib import Path
 
 from adw_modules import (agents, changes, gates, git_helper, pull_request,
-                         quality, session, ui, utils, worktree)
+                         quality, records, session, ui, utils, worktree)
 from adw_modules.data_types import (AgentCall, BuildOutput, ChangeCapture,
                                     DocumentOutput, PhaseParams, PlanOutput,
                                     PrParts, PullRequest, ReviewOutput,
@@ -62,8 +62,8 @@ MAX_REVISION_LOOPS = 2
 MAX_UI_LOOPS = 3
 
 DOCUMENT_NOTES = ("Read diff_path in full before writing. Document only what the "
-                  "diff shows, then copy the write-up into app_docs/ as your task "
-                  "describes.")
+                  "diff shows, then keep the write-up where your task describes "
+                  "(it depends on `records`).")
 
 
 def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
@@ -116,7 +116,7 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
 
     with run.phase(PhaseParams(name="commit_plan", kind="code", owner="git",
                                description="Put the spec on record before any code exists to blur it")) as ph:
-        commit(ph, plan)
+        records.keep(run, ph, plan)
 
     with run.phase(PhaseParams(name="build", kind="agent", owner="builder",
                                description="Implement the plan exactly")) as ph:
@@ -214,6 +214,7 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
     if verified:
         with run.phase(PhaseParams(name="commit_build", kind="code", owner="git",
                                    description="Land the code only now: green suite, approved review")) as ph:
+            records.verify(run, ph)
             commit(ph, build)
 
         with run.phase(PhaseParams(name="changes", kind="code", owner="git",
@@ -234,11 +235,12 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
 
         with run.phase(PhaseParams(name="commit_docs", kind="code", owner="git",
                                    description="Ship the write-up in its own commit, beside the code it describes")) as ph:
-            commit(ph, document)
+            records.keep(run, ph, document)
 
         if open_pr:
             with run.phase(PhaseParams(name="push", kind="code", owner="git",
                                        description="Publish the verified branch — only accepted work leaves the machine")) as ph:
+                records.verify(run, ph)
                 pull_request.push(branch)
                 ph.log(branch=branch, remote="origin")
 
@@ -249,7 +251,8 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml",
                                  title=build.commit_message or plan.summary,
                                  body=pull_request.body(PrParts(
                                      plan=plan, review=review, document=document,
-                                     ui=uitest, ui_note=ui_note, adw_id=run.adw_id)))
+                                     ui=uitest, ui_note=ui_note, adw_id=run.adw_id,
+                                     records=run.cfg.defaults.records)))
                 url = pull_request.open_pr(pr, run.session_dir / "pull_request.md")
                 ph.log(url=url, title=pr.title)
 

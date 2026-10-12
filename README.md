@@ -80,6 +80,8 @@ just obs                   # the trace UI, needs bun
 uv run adws/adw_prompt.py "reply with a one-line summary of this repo" --agent scout
 ```
 
+**Using the factory in a repo that isn't yours to fill?** Install with `--local`. The factory, its runtime and its reference files go into `.git/info/exclude` (per clone, never committed) instead of `.gitignore`, and plans and write-ups stay in each run's session (`records: session`) instead of being committed under `specs/` and `app_docs/`. A run then commits only the product change, and every check still holds: protected files are fingerprinted by content, and records are sealed by hash. Details in `cookbooks/install.md`.
+
 Re-running `install.py` is safe. It skips every file that already exists and reports what it skipped, so a second run doubles as a drift check. `--force` refreshes stamped code to the skill's current version, but it overwrites **all** stamped files including your `sssf.config.yaml` and your prompts, so commit first.
 
 Green on the smoke test means the whole path works: config validated, session minted, Pi ran, envelope parsed, events landed in `adws/adw_data/sssf.db`. Fix it there before composing anything larger, because every multi-agent chain rides this exact path.
@@ -135,6 +137,8 @@ Everything lives in `.claude/skills/sssf/`. `SKILL.md` carries the hard rules an
 | `.env.sample` | `templates/env.sample` | yes |
 | `justfile` | `templates/justfile` | yes, starter recipes to run and watch |
 | `adws/adw_data/sessions/`, `sssf.db` | created at runtime | no, gitignored |
+
+With `install.py --local`, nothing in this table is tracked. It is all excluded in `.git/info/exclude`.
 
 The prompts are yours the moment they land. Edit them in `adws/adw_data/prompt_engineering/{agent}/`, never back inside the skill.
 

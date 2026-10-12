@@ -29,8 +29,8 @@ from adw_modules.data_types import (AgentCall, ChangeCapture, DocumentOutput,
 REQUIRED_AGENTS = ["documenter"]
 
 DOCUMENT_NOTES = ("Read diff_path in full before writing. Document only what the "
-                  "diff shows, then copy the write-up into app_docs/ as your task "
-                  "describes.")
+                  "diff shows, then keep the write-up where your task describes "
+                  "(it depends on `records`).")
 
 
 def main(prompt: str, base: str = "main",

@@ -44,7 +44,7 @@ pinned before the first commit phase and printed in the request phase.
 import argparse
 import sys
 
-from adw_modules import agents, changes, gates, git_helper, quality, session, utils
+from adw_modules import agents, changes, gates, git_helper, quality, records, session, utils
 from adw_modules.data_types import (AgentCall, BuildOutput, ChangeCapture,
                                     DocumentOutput, PhaseParams, PlanOutput,
                                     ReviewOutput)
@@ -54,8 +54,8 @@ MAX_FIX_LOOPS = 3
 MAX_REVISION_LOOPS = 2
 
 DOCUMENT_NOTES = ("Read diff_path in full before writing. Document only what the "
-                  "diff shows, then copy the write-up into app_docs/ as your task "
-                  "describes.")
+                  "diff shows, then keep the write-up where your task describes "
+                  "(it depends on `records`).")
 
 
 def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml", adw_id: str | None = None) -> int:
@@ -86,7 +86,7 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml", adw
 
     with run.phase(PhaseParams(name="commit_plan", kind="code", owner="git",
                                description="Put the spec on record before any code exists to blur it")) as ph:
-        commit(ph, plan)
+        records.keep(run, ph, plan)
 
     with run.phase(PhaseParams(name="build", kind="agent", owner="builder",
                                description="Implement the plan exactly")) as ph:
@@ -145,6 +145,7 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml", adw
     if verified:
         with run.phase(PhaseParams(name="commit_build", kind="code", owner="git",
                                    description="Land the code only now: green suite, approved review")) as ph:
+            records.verify(run, ph)
             commit(ph, build)
 
         with run.phase(PhaseParams(name="changes", kind="code", owner="git",
@@ -168,7 +169,7 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.yaml", adw
 
         with run.phase(PhaseParams(name="commit_docs", kind="code", owner="git",
                                    description="Ship the write-up in its own commit, beside the code it describes")) as ph:
-            commit(ph, document)
+            records.keep(run, ph, document)
 
     return run.finish(accepted=verified,
                       reason="the suite or the review never came back clean")

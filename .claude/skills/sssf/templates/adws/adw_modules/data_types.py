@@ -383,9 +383,14 @@ class ConfigDefaults(BaseModel):
     # The factory's own code is the default: an agent must not be able to edit
     # the machinery that decides whether its work passed.
     protected_files: list[str] = Field(default_factory=lambda: [
-        "adws/adw_modules/", "adws/adw_sssf_config/", "adws/adw_*.py",
+        "adws/adw_modules/", "adws/adw_sssf_config/", "adws/adw_*.py", ".sssf/",
     ])
     data_dir: str = "adws/adw_data"
+    # Where plans and write-ups are kept. "repo": copied into specs/ and
+    # app_docs/ and committed. "session": they stay in the session's
+    # context_handoff/, sealed by hash in the trace, and nothing but the
+    # product change is committed.
+    records: Literal["repo", "session"] = "repo"
 
 
 class ObservabilityConfig(BaseModel):
@@ -456,6 +461,7 @@ class PrParts(BaseModel):
     ui: Optional[UiTestOutput] = None
     ui_note: str = ""               # why the UI phase was skipped, when it was
     adw_id: str
+    records: Literal["repo", "session"] = "repo"   # session: the write-up rides in the body
 
 
 class PullRequest(BaseModel):

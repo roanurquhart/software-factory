@@ -23,6 +23,8 @@ Extend `adws/adw_modules/` with new low-level logic.
 | `console.py` | the terminal narrative — every line printed also lands in the db as a `log` event, so the UI reads the same story; plain sequential lines, no spinners |
 | `console.py` | the rich stdout reporter — every line printed is ALSO traced as a `log` event (`{message, level}`) so the terminal and the swim-lane UI tell the same story |
 | `git_helper.py` | branch, status, diff, commit — the raw plumbing `changes.py` composes |
+| `records.py` | put a plan or write-up on record: commit it (`records: repo`) or seal it by sha256 in the trace and re-verify before code lands (`records: session`) |
+| `permissions.py` | `writes`/`protected_files` enforcement: a `git status` change-set diff plus a content fingerprint of protected files, rolled back on breach |
 | `utils.py` | safe subprocess env, logging, `resolve_prompt` |
 
 ## Never `print()`
