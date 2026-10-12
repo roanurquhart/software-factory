@@ -19,6 +19,8 @@ adws/
 ├── adw_build_review.py          build → review: is this what was asked for? (not testing)
 ├── adw_document.py              write up the work just done, from git diff vs main
 ├── adw_simple_sdlc.py           plan → build → test → review → document; commits each product
+├── adw_sdlc.py                  adw_simple_sdlc in its own worktree + branch, UI test, ends in a PR
+├── adw_design_heavy_sdlc.py     adw_sdlc with the builder on Opus, for design-heavy builds
 ├── adw_modules/                 ALL low-level logic — ADW scripts stay thin
 │   ├── data_types.py            AgentCall, PhaseParams, Phase, Envelope + one output type per agent call
 │   ├── agents.py                load_config, validate, resolve entry → interface + model + thinking

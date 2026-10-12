@@ -29,6 +29,19 @@ The prompt is inline text or a file path. Launch in the background so you can po
 uv run adws/adw_sdlc.py requests/redesign.md --reference ~/Downloads/examples.png
 ```
 
+**Design-heavy builds** (visual design, layout, animation, matching a reference) go to `adw_design_heavy_sdlc`. It is `adw_sdlc` with the builder on Opus, same flags, same phases. Use it when a cheaper builder keeps producing work that passes the checks but looks wrong.
+
+### Highly parallelizable requests: one run per goal
+
+If the request breaks into goals that don't share files, **split it and launch one `adw_sdlc` per goal in parallel**, in the background, each with its own request:
+
+1. **List the goals and the files each will touch.** Goals with no overlap go in parallel. Goals that overlap are chained instead: the later run forks from the earlier with `--base sssf/<earlier-adw-id>`, and you launch it after the earlier one finishes.
+2. **Write one self-contained request per goal**, with the context it needs and its own "done when". Runs can't see each other.
+3. **Launch them together** and capture every `adw_id`. Each run gets its own worktree, branch and PR, so they can't collide.
+4. **Watch them as a group** (`just sessions`, or `just obs` for the swim lanes) and report each run's outcome and PR on its own.
+
+Don't parallelize by reflex. Every run is a full chain with its own cost, and they all draw on the same usage limits. A run that hits a limit fails mid-chain.
+
 ### Listen for the roster
 
 The chain says *what runs*; the config says *who runs it*. **If the engineer references a roster, a config, or a model tier, pass it — do not fall through to the default.**
